@@ -1,0 +1,506 @@
+= Apache NiFi Cluster Alternatives
+:toc:
+:numbered:
+:todo: pass:q[[red]#*TODO*#]
+
+== NiFi overview
+
+=== Demo: How NiFi works (using a single machine/instance)
+
+* https://paulojeronimo.github.io/apache-nifi-tutorial/#lab1[Running Apache NiFi inside a Docker container]
+* https://paulojeronimo.github.io/apache-nifi-tutorial/#lab3[Building a simple Data Flow]
+
+== How NiFi cluster works (under the hood)
+
+=== Demo: Running a cluster locally
+
+{todo}
+
+References:
+
+* https://www.youtube.com/watch?v=rvKTnRiEB9Q[Lesson9: Clustering NiFi] (link:videos/01.mp4[])
+* https://mintopsblog.com/2017/11/12/apache-nifi-cluster-configuration/[Apache NiFi – Cluster configuration]
+
+=== Demo: Running a cluster through Vagrant
+
+----
+$ mkdir downloads && cd $_ && wget -c https://archive.apache.org/dist/nifi/1.0.1/nifi-1.0.1-bin.tar.gz
+$ cd -
+$ p=paulojeronimo/vagrant-nifi-cluster
+$ mkdir -p github/`dirname $p` && cd $_ && git clone https://github.com/$p && cd `basename $p`
+$ cp ../../../downloads/nifi-1.0.1-bin.tar.gz .
+----
+
+----
+$ vagrant plugin install vagrant-vbguest
+$ vagrant plugin install vagrant-hostmanager
+$ vagrant up
+----
+
+Open:
+
+* http://nifi01:8080/nifi/
+* http://nifi02:8080/nifi/
+* http://nifi03:8080/nifi/
+
+References:
+
+* https://github.com/nabidefacto/vagrant-nifi-cluster
+
+=== Demo: 2 instances running in cluster through Docker Compose
+
+----
+$ p=paulojeronimo/docker-compose-nifi-cluster
+$ mkdir -p github/`dirname $p` && cd $_ && git clone https://github.com/$p && cd `basename $p`
+----
+
+----
+$ docker-compose up -d
+$ docker-compose
+----
+
+----
+$ docker-compose logs -f
+----
+
+----
+$ docker-compose ps
+                  Name                                Command               State                                   Ports                                 
+
+docker-compose-nifi-cluster_nifi-nodes_1   ./start-nifi.sh                  Up      8080/tcp, 8081/tcp                                                    
+docker-compose-nifi-cluster_zoo1_1         /docker-entrypoint.sh zkSe ...   Up      0.0.0.0:32768->2181/tcp, 2888/tcp, 3888/tcp                           
+nifi-cluster-seed                          ./start-nifi.sh                  Up      0.0.0.0:8080->8080/tcp, 0.0.0.0:8081->8081/tcp, 0.0.0.0:8082->8082/tcp
+----
+
+----
+$ docker exec nifi-cluster-seed tail -f logs/nifi-app.log
+----
+
+Open http://localhost:8080
+
+Scale up:
+
+----
+$ docker-compose scale nifi-nodes=2
+WARNING: The scale command is deprecated. Use the up command with the --scale flag instead.
+Starting docker-compose-nifi-cluster_nifi-nodes_1 ... done
+Creating docker-compose-nifi-cluster_nifi-nodes_2 ... done
+----
+
+----
+$ docker-compose ps
+                  Name                                Command               State                                   Ports                                 
+
+docker-compose-nifi-cluster_nifi-nodes_1   ./start-nifi.sh                  Up      8080/tcp, 8081/tcp                                                    
+docker-compose-nifi-cluster_nifi-nodes_2   ./start-nifi.sh                  Up      8080/tcp, 8081/tcp                                                    
+docker-compose-nifi-cluster_zoo1_1         /docker-entrypoint.sh zkSe ...   Up      0.0.0.0:32768->2181/tcp, 2888/tcp, 3888/tcp                           
+nifi-cluster-seed                          ./start-nifi.sh                  Up      0.0.0.0:8080->8080/tcp, 0.0.0.0:8081->8081/tcp, 0.0.0.0:8082->8082/tcp
+----
+
+----
+$ docker-compose down
+----
+
+References:
+
+* https://github.com/ijokarumawak/docker-compose-nifi-cluster
+
+== Kubernetes overview
+
+=== Demo: Kubernetes minikube
+
+----
+$ brew cask install minikube
+----
+
+----
+$ minikube start
+Starting local Kubernetes v1.10.0 cluster...
+Starting VM...
+Downloading Minikube ISO
+ 160.27 MB / 160.27 MB [============================================] 100.00% 0s
+Getting VM IP address...
+Moving files into cluster...
+Downloading kubelet v1.10.0
+Downloading kubeadm v1.10.0
+Finished Downloading kubeadm v1.10.0
+Finished Downloading kubelet v1.10.0
+Setting up certs...
+Connecting to cluster...
+Setting up kubeconfig...
+Starting cluster components...
+Kubectl is now configured to use the cluster.
+Loading cached images from config file.
+----
+
+NOTE: minikube, by default (on macOS), runs on VirtualBox.
+
+----
+$ kubectl config current-context
+minikube
+----
+
+----
+$ kubectl version
+Client Version: version.Info{Major:"1", Minor:"11", GitVersion:"v1.11.2", GitCommit:"bb9ffb1654d4a729bb4cec18ff088eacc153c239", GitTreeState:"clean", BuildDate:"2018-08-08T16:31:10Z", GoVersion:"go1.10.3", Compiler:"gc", Platform:"darwin/amd64"}
+Server Version: version.Info{Major:"1", Minor:"10", GitVersion:"v1.10.0", GitCommit:"fc32d2f3698e36b93322a3465f63a14e9f0eaead", GitTreeState:"clean", BuildDate:"2018-03-26T16:44:10Z", GoVersion:"go1.9.3", Compiler:"gc", Platform:"linux/amd64"}
+----
+
+----
+$ kubectl get nodes
+NAME       STATUS    ROLES     AGE       VERSION
+minikube   Ready     master    9m        v1.10.0
+----
+
+----
+$ kubectl cluster-info
+Kubernetes master is running at https://192.168.99.100:8443
+KubeDNS is running at https://192.168.99.100:8443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+
+To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+----
+
+----
+$ kubectl run hello-minikube --image=k8s.gcr.io/echoserver:1.10 --port=8080
+deployment.apps/hello-minikube created
+----
+
+----
+$ kubectl expose deployment hello-minikube --type=NodePort
+service/hello-minikube exposed
+----
+
+----
+$ minikube service hello-minikube --url
+http://192.168.99.100:32646
+----
+
+----
+$ curl $(!!)
+curl $(minikube service hello-minikube --url)
+
+
+Hostname: hello-minikube-7c77b68cff-cm5fz
+
+Pod Information:
+	-no pod information available-
+
+Server values:
+	server_version=nginx: 1.13.3 - lua: 10008
+
+Request Information:
+	client_address=172.17.0.1
+	method=GET
+	real path=/
+	query=
+	request_version=1.1
+	request_scheme=http
+	request_uri=http://192.168.99.100:8080/
+
+Request Headers:
+	accept=*/*
+	host=192.168.99.100:32646
+	user-agent=curl/7.54.0
+
+Request Body:
+	-no body in request-
+----
+
+----
+$ kubectl delete services hello-minikube
+service "hello-minikube" deleted
+----
+
+----
+$ kubectl delete deployment hello-minikube
+deployment.extensions "hello-minikube" deleted
+----
+
+----
+$ minikube stop
+Stopping local Kubernetes cluster...
+Machine stopped.
+----
+
+----
+$ minikube status
+minikube: Stopped
+cluster: 
+kubectl: 
+----
+
+----
+$ minikube start
+Starting local Kubernetes v1.10.0 cluster...
+Starting VM...
+Getting VM IP address...
+Moving files into cluster...
+Setting up certs...
+Connecting to cluster...
+Setting up kubeconfig...
+Starting cluster components...
+Kubectl is now configured to use the cluster.
+Loading cached images from config file.
+----
+
+----
+$ minikube status
+minikube: Running
+cluster: Running
+kubectl: Correctly Configured: pointing to minikube-vm at 192.168.99.100
+----
+
+----
+$ minikube get-k8s-versions
+The following Kubernetes versions are available when using the localkube bootstrapper: 
+	- v1.10.0
+	- v1.9.4
+	- v1.9.0
+	- v1.8.0
+	- v1.7.5
+	- v1.7.4
+	- v1.7.3
+	- v1.7.2
+	- v1.7.0
+	- v1.7.0-rc.1
+	- v1.7.0-alpha.2
+	- v1.6.4
+	- v1.6.3
+	- v1.6.0
+	- v1.6.0-rc.1
+	- v1.6.0-beta.4
+	- v1.6.0-beta.3
+	- v1.6.0-beta.2
+	- v1.6.0-alpha.1
+	- v1.6.0-alpha.0
+	- v1.5.3
+	- v1.5.2
+	- v1.5.1
+	- v1.4.5
+	- v1.4.3
+	- v1.4.2
+	- v1.4.1
+	- v1.4.0
+	- v1.3.7
+	- v1.3.6
+	- v1.3.5
+	- v1.3.4
+	- v1.3.3
+	- v1.3.0
+----
+
+----
+$ minikube dashboard
+----
+
+----
+$ kubectl run hello-nginx --image=nginx --port=80
+deployment.apps/hello-nginx created
+----
+
+----
+$ kubectl get pods
+NAME                           READY     STATUS    RESTARTS   AGE
+hello-nginx-6f9f4fc7dd-ks9rr   1/1       Running   0          22s
+----
+
+----
+$ kubectl describe pod hello-nginx-6f9f4fc7dd-ks9rr
+Name:           hello-nginx-6f9f4fc7dd-ks9rr
+Namespace:      default
+Node:           minikube/10.0.2.15
+Start Time:     Tue, 21 Aug 2018 17:43:21 +0100
+Labels:         pod-template-hash=2959097388
+                run=hello-nginx
+Annotations:    <none>
+Status:         Running
+IP:             172.17.0.4
+Controlled By:  ReplicaSet/hello-nginx-6f9f4fc7dd
+Containers:
+  hello-nginx:
+    Container ID:   docker://cc5e7fe413396fd6897791718ff6c9974533726812c001472966168ff733c829
+    Image:          nginx
+    Image ID:       docker-pullable://nginx@sha256:d85914d547a6c92faa39ce7058bd7529baacab7e0cd4255442b04577c4d1f424
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Tue, 21 Aug 2018 17:43:34 +0100
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from default-token-kb564 (ro)
+Conditions:
+  Type           Status
+  Initialized    True 
+  Ready          True 
+  PodScheduled   True 
+Volumes:
+  default-token-kb564:
+    Type:        Secret (a volume populated by a Secret)
+    SecretName:  default-token-kb564
+    Optional:    false
+QoS Class:       BestEffort
+Node-Selectors:  <none>
+Tolerations:     node.kubernetes.io/not-ready:NoExecute for 300s
+                 node.kubernetes.io/unreachable:NoExecute for 300s
+Events:
+  Type    Reason                 Age   From               Message
+  ----    ------                 ----  ----               -------
+  Normal  Scheduled              3m    default-scheduler  Successfully assigned hello-nginx-6f9f4fc7dd-ks9rr to minikube
+  Normal  SuccessfulMountVolume  3m    kubelet, minikube  MountVolume.SetUp succeeded for volume "default-token-kb564"
+  Normal  Pulling                3m    kubelet, minikube  pulling image "nginx"
+  Normal  Pulled                 2m    kubelet, minikube  Successfully pulled image "nginx"
+  Normal  Created                2m    kubelet, minikube  Created container
+  Normal  Started                2m    kubelet, minikube  Started container
+----
+
+----
+$ kubectl get deployments
+NAME          DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+hello-nginx   1         1         1            1           4m
+----
+
+----
+$ kubectl expose deployment hello-nginx --type=NodePort
+service/hello-nginx exposed
+----
+
+----
+$ kubectl get services
+NAME          TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+hello-nginx   NodePort    10.104.9.105   <none>        80:30384/TCP   1m
+kubernetes    ClusterIP   10.96.0.1      <none>        443/TCP        40m
+----
+
+----
+$ kubectl describe service hello-nginx
+Name:                     hello-nginx
+Namespace:                default
+Labels:                   run=hello-nginx
+Annotations:              <none>
+Selector:                 run=hello-nginx
+Type:                     NodePort
+IP:                       10.104.9.105
+Port:                     <unset>  80/TCP
+TargetPort:               80/TCP
+NodePort:                 <unset>  30384/TCP
+Endpoints:                172.17.0.4:80
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+----
+
+----
+$ kubectl scale --replicas=3 deployment/hello-nginx
+deployment.extensions/hello-nginx scaled
+----
+
+----
+$ kubectl get deployment
+NAME          DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+hello-nginx   3         3         3            3           10m
+----
+
+----
+$ eval $(minikube docker-env)
+----
+
+----
+$ docker images
+REPOSITORY                                 TAG                 IMAGE ID            CREATED             SIZE
+nginx                                      latest              c82521676580        4 weeks ago         109MB
+k8s.gcr.io/kube-proxy-amd64                v1.10.0             bfc21aadc7d3        4 months ago        97MB
+k8s.gcr.io/kube-apiserver-amd64            v1.10.0             af20925d51a3        4 months ago        225MB
+k8s.gcr.io/kube-scheduler-amd64            v1.10.0             704ba848e69a        4 months ago        50.4MB
+k8s.gcr.io/kube-controller-manager-amd64   v1.10.0             ad86dbed1555        4 months ago        148MB
+k8s.gcr.io/echoserver                      1.10                365ec60129c5        5 months ago        95.4MB
+k8s.gcr.io/etcd-amd64                      3.1.12              52920ad46f5b        5 months ago        193MB
+k8s.gcr.io/kube-addon-manager              v8.6                9c16409588eb        6 months ago        78.4MB
+k8s.gcr.io/k8s-dns-dnsmasq-nanny-amd64     1.14.8              c2ce1ffb51ed        7 months ago        41MB
+k8s.gcr.io/k8s-dns-sidecar-amd64           1.14.8              6f7f2dc7fab5        7 months ago        42.2MB
+k8s.gcr.io/k8s-dns-kube-dns-amd64          1.14.8              80cc5ea4b547        7 months ago        50.5MB
+k8s.gcr.io/pause-amd64                     3.1                 da86e6ba6ca1        8 months ago        742kB
+k8s.gcr.io/kubernetes-dashboard-amd64      v1.8.1              e94d2f21bc0c        8 months ago        121MB
+gcr.io/k8s-minikube/storage-provisioner    v1.8.1              4689081edb10        9 months ago        80.8MB
+----
+
+References:
+
+* https://kubernetes.io/docs/tasks/tools/install-minikube/
+* https://kubernetes.io/docs/reference/kubectl/cheatsheet/
+* https://www.youtube.com/watch?v=kz8-JcoIQyw
+** https://developer.ibm.com/recipes/tutorials/deploying-a-containerized-app-in-kubernetes-using-kubernetes-dashboard/
+* https://rominirani.com/tutorial-getting-started-with-kubernetes-with-docker-on-mac-7f58467203fd
+* https://blog.alexellis.io/docker-for-mac-with-kubernetes/
+* https://medium.com/@jonjam/kubernetes-development-environment-using-docker-on-windows-9cd731c776b5
+
+=== Demo: Spring Boot Apps on Kubernetes
+
+References:
+
+* https://www.youtube.com/watch?v=RelPurLZnII[Deploying Spring Boot Apps on Kubernetes - Thomas Risberg] (link:videos/03.mp4[])
+** https://github.com/trisberg/s1p2017-boot-k8s
+* https://www.youtube.com/watch?v=OsWXtVbTnv0[Kubernetes for the Spring Developer - Meaghan Kjelland]
+
+=== Demo: Node.js Apps on Kubernetes
+
+* https://www.youtube.com/watch?v=wMNQz5u-25A&t=967s[Using Minikube (Kubernetes) for Node.js Development]
+
+=== Demo: Kubernetes inside Docker
+
+----
+$ kubectl config get-contexts
+CURRENT   NAME                                     CLUSTER                      AUTHINFO                         NAMESPACE
+          /192-168-64-2:8443/developer             192-168-64-2:8443            developer/192-168-64-2:8443      
+          default/192-168-64-2:8443/system:admin   192-168-64-2:8443            system:admin/192-168-64-2:8443   default
+          docker-for-desktop                       docker-for-desktop-cluster   docker-for-desktop               
+*         myproject/192-168-64-2:8443/developer    192-168-64-2:8443            developer/192-168-64-2:8443      myproject
+----
+
+----
+$ kubectl config use-context docker-for-desktop
+Switched to context "docker-for-desktop".
+----
+
+References:
+
+* https://www.youtube.com/watch?v=h4J8xQWlsQw[Kubernetes in Docker for Mac Beta] (link:videos/02.mp4[])
+** https://github.com/dockersamples/k8s-wordsmith-demo
+
+=== Demo: Kubernetes in Cloud Foundry
+
+{todo}
+
+References:
+
+* https://www.youtube.com/watch?v=0jy3hMt1Zc8[Why Do I Need Kubernetes When I Already Have Cloud Foundry? - Sanjay Patil, SAP] (link:videos/04.mp4[])
+* https://www.youtube.com/watch?v=uOFW_0J9q70[Deploying Kubernetes with Cloud Foundry and BOSH] (link:videos/05.mp4[])
+* https://www.youtube.com/watch?v=KvwZIshANsk[The Tale of Two Runtimes: Kubernetes in Cloud Foundry - Konstantin Semenov, Pivotal] (link:videos/06.mp4[])
+
+=== Demo: Running NiFi in Kubernetes
+
+{todo}
+
+References:
+
+* https://github.com/AlexsJones/kubernetes-nifi-cluster
+* https://github.com/Magopancione/nifi-clustering
+* https://github.com/Kanugantihub/NiFi-on-Kubernetes-K8S
+
+=== Demo: Running NiFi in Kubernetes (in Cloud Foundry)
+
+{todo}
+
+== Out of scope (not covered in this presentation)
+
+=== Cloud Foundry Diego
+
+* https://www.youtube.com/watch?v=gB-nrdYTTKU[Cloud Foundry Diego Overview] (link:videos/07.mp4[])
+
+=== Kubernetes in AWS
+
+* https://kubernetes.io/docs/setup/custom-cloud/kops/
+* https://github.com/aws-samples/aws-workshop-for-kubernetes
+* https://medium.com/containermind/how-to-create-a-kubernetes-cluster-on-aws-in-few-minutes-89dda10354f4
+* https://www.weave.works/technologies/kubernetes-on-aws/
